@@ -15,6 +15,10 @@
 /** The null video driver. */
 class VideoDriver_Null : public VideoDriver {
 private:
+#ifdef CALIF_ICU4X_DEMO
+	bool demo_render = false;
+	std::vector<Colour> demo_pixels;
+#endif
 	uint ticks = 0; ///< Amount of ticks to run.
 
 public:

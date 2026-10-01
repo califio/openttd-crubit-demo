@@ -122,6 +122,17 @@ find_package(LibLZMA)
 find_package(LZO)
 find_package(PNG)
 
+option(CALIF_ICU4X_DEMO "Enable the ICU4X word-navigation demo" OFF)
+if(CALIF_ICU4X_DEMO)
+    set(_calif_module_path "${CMAKE_MODULE_PATH}")
+    set(CMAKE_MODULE_PATH "")
+    find_package(ICU REQUIRED COMPONENTS i18n uc)
+    set(CMAKE_MODULE_PATH "${_calif_module_path}")
+    set(ICU_I18N_FOUND ${ICU_i18n_FOUND})
+    set(ICU_UC_FOUND ${ICU_uc_FOUND})
+    add_compile_definitions(CALIF_ICU4X_DEMO)
+endif()
+
 if(WIN32 OR EMSCRIPTEN)
     # Windows uses WinHttp for HTTP requests.
     # Emscripten uses Javascript for HTTP requests.
@@ -465,3 +476,28 @@ if(APPLE OR WIN32)
 endif()
 
 include(InstallAndPackage)
+
+if(CALIF_ICU4X_DEMO)
+    target_link_libraries(openttd_lib ICU::i18n ICU::uc)
+    set(CALIF_CRUBIT_SOURCE "${CMAKE_SOURCE_DIR}/../../crubit" CACHE PATH "Pinned Crubit source")
+    set(Rust_TOOLCHAIN nightly CACHE STRING "Rust toolchain matching the Crubit driver")
+    set(CORROSION_TOOLS_RUST_TOOLCHAIN "${Rust_TOOLCHAIN}" CACHE STRING "Rust toolchain for Crubit")
+    list(PREPEND CMAKE_PROGRAM_PATH "${CALIF_CRUBIT_SOURCE}/target/release")
+    include(FetchContent)
+    FetchContent_Declare(Crubit SOURCE_DIR "${CALIF_CRUBIT_SOURCE}")
+    # Same experimental integration used by google/safe-bindings, pinned for this demo.
+    FetchContent_Declare(Corrosion
+        GIT_REPOSITORY https://github.com/thunderseethe/corrosion
+        GIT_TAG deddd3c0dbf9e6b551d3dd1d6437b8413d41940a)
+    FetchContent_MakeAvailable(Corrosion)
+    corrosion_experimental_crubit(icu4x_word_bindings)
+    corrosion_import_crate(MANIFEST_PATH demo/word/rust/Cargo.toml LOCKED)
+    # Ensure the aggregate support target also builds its member libraries.
+    get_target_property(_calif_support_targets crubit_support INTERFACE_LINK_LIBRARIES)
+    add_dependencies(crubit_support ${_calif_support_targets})
+
+    add_library(calif_word_adapter STATIC demo/word_adapter.cc)
+    target_compile_options(calif_word_adapter PRIVATE -fno-exceptions -Wno-nontrivial-memcall)
+    target_link_libraries(calif_word_adapter PRIVATE icu4x_word_bindings)
+    target_link_libraries(openttd_lib calif_word_adapter)
+endif()

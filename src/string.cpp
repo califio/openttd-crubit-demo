@@ -39,6 +39,10 @@
 #	include "os/macosx/string_osx.h"
 #endif
 
+#if defined(CALIF_ICU4X_DEMO) && !defined(STRGEN) && !defined(SETTINGSGEN)
+#include "../demo/word_adapter.h"
+#endif
+
 #include "safeguards.h"
 
 
@@ -606,6 +610,9 @@ class IcuStringIterator : public StringIterator
 {
 	std::unique_ptr<icu::BreakIterator> char_itr; ///< ICU iterator for characters.
 	std::unique_ptr<icu::BreakIterator> word_itr; ///< ICU iterator for words.
+#ifdef CALIF_ICU4X_DEMO
+	std::unique_ptr<Icu4xWordIterator> rust_word_itr;
+#endif
 
 	std::vector<UChar> utf16_str;      ///< UTF-16 copy of the string.
 	std::vector<size_t> utf16_to_utf8; ///< Mapping from UTF-16 code point position to index in the UTF-8 source string.
@@ -616,7 +623,14 @@ public:
 		UErrorCode status = U_ZERO_ERROR;
 		auto locale = icu::Locale(_current_language != nullptr ? _current_language->isocode : "en");
 		this->char_itr.reset(icu::BreakIterator::createCharacterInstance(locale, status));
-		this->word_itr.reset(icu::BreakIterator::createWordInstance(locale, status));
+#ifdef CALIF_ICU4X_DEMO
+		if (GetEnv("CALIF_WORD_BACKEND").value_or("icu4c") == "icu4x") {
+			this->rust_word_itr = std::make_unique<Icu4xWordIterator>();
+		} else
+#endif
+		{
+			this->word_itr.reset(icu::BreakIterator::createWordInstance(locale, status));
+		}
 
 		this->utf16_str.push_back('\0');
 		this->utf16_to_utf8.push_back(0);
@@ -654,9 +668,20 @@ public:
 		UErrorCode status = U_ZERO_ERROR;
 		utext_openUChars(&text, this->utf16_str.data(), this->utf16_str.size() - 1, &status);
 		this->char_itr->setText(&text, status);
-		this->word_itr->setText(&text, status);
+#ifdef CALIF_ICU4X_DEMO
+		if (this->rust_word_itr) {
+			if (!this->rust_word_itr->SetText(std::span<const char16_t>(this->utf16_str.data(), this->utf16_str.size() - 1))) {
+				FatalError("ICU4X demo input exceeds supported length");
+			}
+			this->rust_word_itr->first();
+		} else
+#endif
+		{
+			this->word_itr->setText(&text, status);
+			this->word_itr->first();
+		}
 		this->char_itr->first();
-		this->word_itr->first();
+		utext_close(&text);
 	}
 
 	size_t SetCurPosition(size_t pos) override
@@ -686,13 +711,21 @@ public:
 				break;
 
 			case ITER_WORD:
-				pos = this->word_itr->following(this->char_itr->current());
+				pos =
+#ifdef CALIF_ICU4X_DEMO
+					this->rust_word_itr ? this->rust_word_itr->following(this->char_itr->current()) :
+#endif
+					this->word_itr->following(this->char_itr->current());
 				/* The ICU word iterator considers both the start and the end of a word a valid
 				 * break point, but we only want word starts. Move to the next location in
 				 * case the new position points to whitespace. */
 				while (pos != icu::BreakIterator::DONE &&
 						IsWhitespace(Utf16DecodeChar((const uint16_t *)&this->utf16_str[pos]))) {
-					int32_t new_pos = this->word_itr->next();
+					int32_t new_pos =
+#ifdef CALIF_ICU4X_DEMO
+					this->rust_word_itr ? this->rust_word_itr->next() :
+#endif
+					this->word_itr->next();
 					/* Don't set it to DONE if it was valid before. Otherwise we'll return END
 					 * even though the iterator wasn't at the end of the string before. */
 					if (new_pos == icu::BreakIterator::DONE) break;
@@ -718,13 +751,21 @@ public:
 				break;
 
 			case ITER_WORD:
-				pos = this->word_itr->preceding(this->char_itr->current());
+				pos =
+#ifdef CALIF_ICU4X_DEMO
+					this->rust_word_itr ? this->rust_word_itr->preceding(this->char_itr->current()) :
+#endif
+					this->word_itr->preceding(this->char_itr->current());
 				/* The ICU word iterator considers both the start and the end of a word a valid
 				 * break point, but we only want word starts. Move to the previous location in
 				 * case the new position points to whitespace. */
 				while (pos != icu::BreakIterator::DONE &&
 						IsWhitespace(Utf16DecodeChar((const uint16_t *)&this->utf16_str[pos]))) {
-					int32_t new_pos = this->word_itr->previous();
+					int32_t new_pos =
+#ifdef CALIF_ICU4X_DEMO
+					this->rust_word_itr ? this->rust_word_itr->previous() :
+#endif
+					this->word_itr->previous();
 					/* Don't set it to DONE if it was valid before. Otherwise we'll return END
 					 * even though the iterator wasn't at the start of the string before. */
 					if (new_pos == icu::BreakIterator::DONE) break;

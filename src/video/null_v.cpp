@@ -14,6 +14,12 @@
 #include "../window_func.h"
 #include "null_v.h"
 
+#ifdef CALIF_ICU4X_DEMO
+#include <fstream>
+#include "../string_func.h"
+extern bool CalifWordDemoTick(uint tick);
+#endif
+
 #include "../safeguards.h"
 
 /** Factory for the null video driver. */
@@ -36,6 +42,15 @@ std::optional<std::string_view> VideoDriver_Null::Start(const StringList &parm)
 	_screen.dst_ptr = nullptr;
 	ScreenSizeChanged();
 
+#ifdef CALIF_ICU4X_DEMO
+	this->demo_render = GetDriverParamBool(parm, "render");
+	if (this->demo_render) {
+		BlitterFactory::SelectBlitter("32bpp-simple");
+		this->demo_pixels.resize(_screen.width * _screen.height);
+		_screen.dst_ptr = this->demo_pixels.data();
+		return std::nullopt;
+	}
+#endif
 	/* Do not render, nor blit */
 	Debug(misc, 1, "Forcing blitter 'null'...");
 	BlitterFactory::SelectBlitter("null");
@@ -53,7 +68,21 @@ void VideoDriver_Null::MainLoop()
 	for (i = 0; i < this->ticks; i++) {
 		::GameLoop();
 		::InputLoop();
+#ifdef CALIF_ICU4X_DEMO
+		bool capture = this->demo_render && CalifWordDemoTick(i);
+#endif
 		::UpdateWindows();
+#ifdef CALIF_ICU4X_DEMO
+		if (capture) {
+			DrawDirtyBlocks();
+			auto dir = GetEnv("CALIF_RECORD_DIR").value_or(".");
+			std::ofstream out(fmt::format("{}/frame-{:03}.ppm", dir, i), std::ios::binary);
+			out << "P6\n" << _screen.width << " " << _screen.height << "\n255\n";
+			for (const auto &pixel : this->demo_pixels) {
+				out.put(pixel.r); out.put(pixel.g); out.put(pixel.b);
+			}
+		}
+#endif
 	}
 
 	/* If requested, make a save just before exit. The normal exit-flow is
