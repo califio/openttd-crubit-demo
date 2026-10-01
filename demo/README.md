@@ -57,6 +57,12 @@ CALIF_WORD_BACKEND=icu4x ./openttd -X -x \
 
 The offscreen recording is verified; interactive Cocoa UI behavior and Linux/Windows builds have not been verified.
 
+## Continuous integration
+
+The [ICU4X workflow](../.github/workflows/ci-icu4x.yml) builds the demo on macOS arm64 with Xcode 26.3 and `nightly-2026-09-07`. It builds the pinned Crubit Cargo driver from source, enables `CALIF_ICU4X_DEMO`, builds the application, and runs the word-navigation comparisons and full unit suite. The inherited platform jobs leave the demo disabled; their results do not establish Crubit support on those platforms.
+
+The fork's shared vcpkg setup uses a file cache without organization package credentials. It downloads libdisasm from Debian's source mirror and verifies the original vcpkg SHA-512 checksum. Windows CI uses the VS 2022 runner because the 15.3 dependency baseline's Breakpad code uses an API removed in VS 2026. These CI changes leave the OpenTTD source baseline and manifest dependency versions intact.
+
 ## Binding generation through Corrosion
 
 After loading Corrosion, the binding integration is:

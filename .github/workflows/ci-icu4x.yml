@@ -1,0 +1,67 @@
+name: CI - ICU4X demo
+
+on:
+  pull_request:
+  push:
+    branches:
+    - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  word-navigation:
+    name: Crubit word navigation (macOS arm64)
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: nightly-2026-09-07
+
+    steps:
+    - name: Checkout OpenTTD
+      uses: actions/checkout@v6
+
+    - name: Select Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '26.3'
+
+    - name: Install dependencies
+      run: brew install cmake abseil protobuf icu4c@78 libpng xz lzo
+
+    - name: Install matching Rust toolchain
+      run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustc-dev,llvm-tools,rustfmt
+
+    - name: Checkout Crubit
+      uses: actions/checkout@v6
+      with:
+        repository: google/crubit
+        ref: 20dc640430bd60ff2f7f8dbf69c311c5f807adde
+        path: .ci/crubit
+
+    - name: Build Crubit's Cargo driver
+      working-directory: .ci/crubit
+      run: cargo build --release --locked -p cargo-cpp_api_from_rust
+
+    - name: Configure with ICU4X enabled
+      run: |
+        cmake -S . -B build-icu4x -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DCALIF_ICU4X_DEMO=ON -DCALIF_CRUBIT_SOURCE="$GITHUB_WORKSPACE/.ci/crubit" \
+          -DRust_TOOLCHAIN="$RUSTUP_TOOLCHAIN" \
+          -DCORROSION_TOOLS_RUST_TOOLCHAIN="$RUSTUP_TOOLCHAIN" \
+          -DICU_ROOT="$(brew --prefix icu4c@78)" \
+          -DCMAKE_PREFIX_PATH="$(brew --prefix icu4c@78)" \
+          -DOPTION_USE_ASSERTS=ON
+
+    - name: Build application and tests
+      run: cmake --build build-icu4x --target openttd openttd_test --parallel 3
+
+    - name: Compare ICU4X word navigation with ICU4C
+      run: build-icu4x/openttd_test '[word]' --warn NoTests
+
+    - name: Run the full unit test suite
+      run: build-icu4x/openttd_test

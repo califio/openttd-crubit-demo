@@ -14,7 +14,8 @@ jobs:
   windows:
     name: CI
 
-    runs-on: windows-latest
+    # The 15.3 dependency baseline predates VS 2026's removal of stdext iterators.
+    runs-on: windows-2022
 
     steps:
     - name: Checkout
@@ -22,7 +23,9 @@ jobs:
 
     - name: Setup vcpkg
       id: vcpkg
-      uses: OpenTTD/actions/setup-vcpkg@v6
+      uses: ./.github/actions/setup-vcpkg
+      with:
+        cache-key: ${{ inputs.arch }}
 
     - name: Install OpenGFX
       shell: bash
