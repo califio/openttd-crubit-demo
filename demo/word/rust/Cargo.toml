@@ -1,0 +1,10 @@
+[package]
+name = "icu4x_word_bindings"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Keep defaults enabled: the pinned Crubit Cargo driver enables them again in
+# its generated build project. Both builds must agree on ICU4X type layouts.
+# The binding explicitly selects new_dictionary(), regardless of enabled features.
+icu_segmenter = { version = "=2.2.0", features = ["compiled_data"] }

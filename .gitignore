@@ -6,3 +6,22 @@ docs/gamedocs/*
 docs/source/*
 /out
 /vcpkg_installed
+
+# Local editor caches and generated build artifacts.
+/.cache/
+.DS_Store
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/compile_commands.json
+/CTestTestfile.cmake
+/Testing/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.dSYM/

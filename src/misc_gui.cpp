@@ -41,6 +41,12 @@
 
 #include "table/strings.h"
 
+#ifdef CALIF_ICU4X_DEMO
+#include "../demo/word_adapter.h"
+#include <fstream>
+static std::string calif_demo_action;
+#endif
+
 #include "safeguards.h"
 
 /** Method to open the OSK. */
@@ -932,6 +938,9 @@ struct QueryStringWindow : public Window
 
 	std::string GetWidgetString(WidgetID widget, StringID stringid) const override
 	{
+#ifdef CALIF_ICU4X_DEMO
+		if (widget == WID_QS_CAPTION && !calif_demo_action.empty()) return calif_demo_action;
+#endif
 		if (widget == WID_QS_CAPTION) return GetString(this->editbox.caption);
 
 		return this->Window::GetWidgetString(widget, stringid);
@@ -1068,6 +1077,37 @@ void ShowQueryString(std::string_view str, StringID caption, uint maxsize, Windo
 	CloseWindowByClass(WC_QUERY_STRING);
 	new QueryStringWindow(str, caption, (flags.Test(QueryStringFlag::LengthIsInChars) ? MAX_CHAR_LENGTH : 1) * maxsize, maxsize, _query_string_desc, parent, afilter, flags);
 }
+
+#ifdef CALIF_ICU4X_DEMO
+/** Scripted input through the real edit control; enabled only by null:render. */
+bool CalifWordDemoTick(uint tick)
+{
+	if (tick < 20 || tick > 220 || tick % 20 != 0) return false;
+	const uint step = tick / 20 - 1;
+	static const uint16_t keys[] = {WKC_HOME, WKC_CTRL | WKC_RIGHT, WKC_CTRL | WKC_RIGHT,
+		WKC_CTRL | WKC_RIGHT, WKC_CTRL | WKC_LEFT, WKC_CTRL | WKC_DELETE,
+		WKC_END, WKC_CTRL | WKC_BACKSPACE, WKC_CTRL | WKC_BACKSPACE,
+		WKC_HOME, WKC_CTRL | WKC_RIGHT};
+	static const char *labels[] = {"Home", "Ctrl + Right", "Ctrl + Right", "Ctrl + Right",
+		"Ctrl + Left", "Ctrl + Delete", "End", "Ctrl + Backspace", "Ctrl + Backspace", "Home", "Ctrl + Right"};
+	if (step == 0) {
+		CloseWindowByClass(WC_SELECT_GAME);
+		ShowQueryString("Hello caf\u00E9 beautiful world", STR_BUTTON_OK, 256,
+			FindWindowById(WC_MAIN_WINDOW, 0), CS_ALPHANUMERAL, {});
+	}
+	auto *w = dynamic_cast<QueryStringWindow *>(FindWindowById(WC_QUERY_STRING, WN_QUERY_STRING));
+	if (w == nullptr) return false;
+	calif_demo_action = fmt::format("{} | {}", GetEnv("CALIF_WORD_BACKEND").value_or("icu4c"), labels[step]);
+	SetFocusedWindow(w);
+	w->editbox.text.HandleKeyPress(0, keys[step]);
+	w->editbox.text.caret = true;
+	w->SetDirty();
+	std::ofstream out(std::string(GetEnv("CALIF_RECORD_DIR").value_or(".")) + "/trace.tsv", step == 0 ? std::ios::trunc : std::ios::app);
+	out << step << '\t' << labels[step] << '\t' << w->editbox.text.caretpos << '\t'
+		<< w->editbox.text.GetText() << '\t' << Icu4xWordIterator::DemoSegmentationCalls() << '\n';
+	return true;
+}
+#endif
 
 /**
  * Window used for asking the user a YES/NO question.

@@ -34,7 +34,9 @@ jobs:
 
     - name: Setup vcpkg
       id: vcpkg
-      uses: OpenTTD/actions/setup-vcpkg@v6
+      uses: ./.github/actions/setup-vcpkg
+      with:
+        cache-key: ${{ inputs.compiler }}
 
     - name: Install dependencies
       run: |

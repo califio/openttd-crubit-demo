@@ -1,0 +1,40 @@
+name: Setup vcpkg for the demo fork
+description: Use a pinned vcpkg checkout and a file cache without package registry credentials.
+inputs:
+  cache-key:
+    description: Compiler or target architecture distinguishing cached binaries.
+    required: true
+outputs:
+  vcpkg:
+    description: vcpkg executable
+    value: ${{ runner.temp }}/vcpkg/vcpkg
+  vcpkg-cmake:
+    description: vcpkg CMake toolchain
+    value: ${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+runs:
+  using: composite
+  steps:
+  - name: Install vcpkg
+    shell: bash
+    run: |
+      git clone https://github.com/microsoft/vcpkg "${{ runner.temp }}/vcpkg"
+      cd "${{ runner.temp }}/vcpkg"
+      git checkout --detach eb2d3a3279fd019cb7733072d86900d0ad2a1aef
+      if [[ "$RUNNER_OS" == Windows ]]; then
+        ./bootstrap-vcpkg.bat -disableMetrics
+      else
+        ./bootstrap-vcpkg.sh -disableMetrics
+      fi
+      mkdir -p "${{ runner.temp }}/vcpkg-binaries" downloads
+      echo "VCPKG_BINARY_SOURCES=clear;files,${{ runner.temp }}/vcpkg-binaries,readwrite" >> "$GITHUB_ENV"
+      echo "VCPKG_DOWNLOADS=${{ runner.temp }}/vcpkg/downloads" >> "$GITHUB_ENV"
+
+  - name: Cache vcpkg binaries
+    uses: actions/cache@v6
+    with:
+      path: ${{ runner.temp }}/vcpkg-binaries
+      key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ inputs.cache-key }}-${{ hashFiles('vcpkg.json', '.github/actions/setup-vcpkg/*') }}
+
+  - name: Fetch libdisasm from Debian's source mirror
+    shell: bash
+    run: cmake -P "${{ github.action_path }}/fetch-libdisasm.cmake"
